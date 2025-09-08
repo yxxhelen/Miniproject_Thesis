@@ -1,6 +1,6 @@
 # 2025 Fall ECE Senior Design Miniproject
 
-[ASSIGNMENT](./assignment/)
+[Project definition](./Project.md)
 
 This project uses the Raspberry Pi Pico 2WH SC1634 (wireless, with header pins).
 
@@ -25,6 +25,45 @@ Other IDE can be used, including Visual Studio Code or
 * Piezo Buzzer SameSky CPT-3095C-300
 * 10k ohm resistor
 * 2 [tactile switches](hhttps://www.mouser.com/ProductDetail/E-Switch/TL59NF160Q?qs=QtyuwXswaQgJqDRR55vEFA%3D%3D)
+
+### Photoresistor details
+
+The photoresistor uses the 10k ohm resistor as a voltage divider
+[circuit](./doc/photoresistor.md).
+The 10k ohm resistor connects to "3V3" and to ADC2.
+The photoresistor connects to the ADC2 and to AGND.
+Polarity is not important for this resistor and photoresistor.
+
+The MicroPython
+[machine.ADC](https://docs.micropython.org/en/latest/library/machine.ADC.html)
+class is used to read the analog voltage from the photoresistor.
+The `machine.ADC(id)` value corresponds to the "GP" pin number.
+On the Pico W, GP28 is ADC2, accessed with `machine.ADC(28)`.
+
+### Piezo buzzer details
+
+PWM (Pulse Width Modulation) can be used to generate analog signals from digital outputs.
+The Raspberry Pi Pico has eight PWM groups each with two PWM channels.
+The [Pico WH pinout diagram](https://datasheets.raspberrypi.com/picow/PicoW-A4-Pinout.pdf)
+shows that almost all Pico pins can be used for multiple distinct tasks as configured by MicroPython code or other software.
+In this exercise, we will generate a PWM signal to drive a speaker.
+
+GP16 is one of the pins that can be used to generate PWM signals.
+Connect the speaker with the black wire (negative) to GND and the red wire (positive) to GP16.
+
+In a more complete project, we would use additional resistors and capacitors with an amplifer to boost the sound output to a louder level with a bigger speaker.
+The sound output is quiet but usable for this exercise.
+
+Musical notes correspond to particular base frequencies and typically have rich harmonics in typical musical instruments.
+An example soundboard showing note frequencies is [clickable](https://muted.io/note-frequencies/).
+Over human history, the corresspondance of notes to frequencies has changed over time and location and musical cultures.
+For the question below, feel free to use musical scale of your choice!
+
+
+## Notes
+
+Pico MicroPython time.sleep() doesn't error for negative values even though such are obviously incorrect--it is undefined for a system to sleep for negative time.
+Duty cycle greater than 1 is undefined, so we clip the duty cycle to the range [0, 1].
 
 
 ## Reference

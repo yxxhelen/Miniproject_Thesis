@@ -13,12 +13,6 @@ import urequests
 url = "https://www.howsmyssl.com/a/check"
 DNS = "8.8.8.8"
 
-ssid = ""
-# Fill in the SSID of your WiFi Hotspot or network
-
-passw = ""
-# other people can see this if you push it to Git!
-
 
 def get_tls(jt: str) -> str:
     params = json.loads(jt)
@@ -26,6 +20,14 @@ def get_tls(jt: str) -> str:
 
 
 async def main():
+
+    wifi_config = "wifi_config.json"
+
+    with open(wifi_config, "r") as f:
+        data = json.load(f)
+    ssid = data["ssid"]
+    passw = data["passw"]
+
     print(f"Connecting to WiFi {ssid}")
     sta_if = network.WLAN(network.STA_IF)
     sta_if.active(True)
