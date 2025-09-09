@@ -8,7 +8,7 @@ installed on the Pi Pico.
 
 ## Install Thonny
 
-From the laptop Terminal:
+Thonny can be installed via Python Pip from the laptop Terminal (Linux, macOS, or Windows):
 
 ```sh
 python -m pip install thonny
@@ -20,7 +20,15 @@ Start Thonny by typing in Terminal:
 thonny
 ```
 
+Alternatively, there are platform-specific ways to install Thonny if you prefer or the "pip" method doesn't work for your computer.
+
 ### macOS
+
+If you use [Homebrew](https://brew.sh) there is a [Thonny](https://formulae.brew.sh/cask/thonny) package
+
+```sh
+brew install thonny
+```
 
 If on macOS and you used the Thonny .pkg file from
 [Thonny.org](https://thonny.org/),
@@ -28,7 +36,7 @@ use macOS Spotlight to find Thonny and start it--press <kbd>Command</kbd><kbd>sp
 
 ### Windows
 
-If on Windows and you used the Thonny .exe file from
+If on Windows one can use the Thonny .exe file from
 [Thonny.org](https://thonny.org/)
 or
 
