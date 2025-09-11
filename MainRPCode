@@ -1,0 +1,227 @@
+# main.py — Pico W MicroPython "Light Orchestra: Device Service (API v1.0)"
+
+import network, time, ubinascii, machine, ujson
+import uasyncio as asyncio
+from machine import Pin, PWM, ADC
+
+# ====== CONFIG ======
+WIFI_SSID = "YOUR_WIFI_SSID"
+WIFI_PSK  = "YOUR_WIFI_PASSWORD"
+
+# Pins
+ADC_PIN = 28        # GP28 = ADC2
+BUZZER_PIN = 16     # GP16 PWM-capable
+
+# ====== Hardware setup ======
+adc = ADC(ADC_PIN)
+pwm = PWM(Pin(BUZZER_PIN))
+pwm.freq(440)
+pwm.duty_u16(0)
+
+# ====== Device identity ======
+unique = ubinascii.hexlify(machine.unique_id()).decode().upper()
+DEVICE_ID = f"pico-w-{unique}"
+
+API_VERSION = "1.0.0"
+
+# ====== Tone/melody state ======
+_play_task = None
+_task_lock = asyncio.Lock()
+
+def _clip01(x):
+    try:
+        x = float(x)
+    except:
+        return 0.0
+    if x < 0.0: return 0.0
+    if x > 1.0: return 1.0
+    return x
+
+def _set_silence():
+    pwm.duty_u16(0)
+
+def _play_freq(freq_hz: int, duty01: float):
+    if freq_hz <= 0 or duty01 <= 0:
+        _set_silence()
+        return
+    pwm.freq(int(freq_hz))
+    pwm.duty_u16(int(_clip01(duty01) * 65535))
+
+async def _play_tone(freq, ms, duty):
+    _play_freq(freq, duty)
+    await asyncio.sleep_ms(max(0, int(ms)))
+    _set_silence()
+
+async def _play_melody(notes, gap_ms):
+    for n in notes:
+        freq = int(n.get("freq", 0))
+        ms = int(n.get("ms", 0))
+        duty = _clip01(n.get("duty", 0.5))
+        _play_freq(freq, duty)
+        await asyncio.sleep_ms(max(0, ms))
+        _set_silence()
+        await asyncio.sleep_ms(max(0, int(gap_ms)))
+
+def read_sensor():
+    # 16-bit scale for consistency with prompt
+    raw12 = adc.read_u16()          # already 16-bit on Pico
+    raw = raw12 & 0xFFFF
+    norm = raw / 65535.0
+    # crude lux estimate; calibrate if desired
+    lux_est = round(1 + 900 * (norm ** 1.2), 1)
+    return raw, norm, lux_est
+
+# ====== Tiny HTTP server (uasyncio + sockets) ======
+import socket
+
+async def handle_client(reader, writer):
+    try:
+        req_line = await reader.readline()
+        if not req_line:
+            await writer.aclose()
+            return
+
+        method, path, _ = req_line.decode().split(" ")
+        # read headers (and optional body)
+        headers = {}
+        content_len = 0
+        while True:
+            line = await reader.readline()
+            if not line or line == b"\r\n":
+                break
+            k, v = line.decode().split(":", 1)
+            headers[k.strip().lower()] = v.strip()
+        if "content-length" in headers:
+            content_len = int(headers["content-length"])
+        body = b""
+        if content_len > 0:
+            body = await reader.readexactly(content_len)
+
+        # ---- routing ----
+        if method == "GET" and path == "/health":
+            payload = {
+                "status": "ok",
+                "device_id": DEVICE_ID,
+                "api": API_VERSION
+            }
+            await _json(writer, 200, payload)
+
+        elif method == "GET" and path == "/sensor":
+            raw, norm, lux = read_sensor()
+            payload = {"raw": raw, "norm": round(norm, 3), "lux_est": lux}
+            await _json(writer, 200, payload)
+
+        elif method == "POST" and path == "/tone":
+            data = {}
+            if body:
+                try:
+                    data = ujson.loads(body)
+                except:
+                    pass
+            freq = int(data.get("freq", 440))
+            ms   = int(data.get("ms", 300))
+            duty = _clip01(data.get("duty", 0.5))
+
+            async with _task_lock:
+                global _play_task
+                if _play_task and not _play_task.done():
+                    _play_task.cancel()
+                    _set_silence()
+                _play_task = asyncio.create_task(_play_tone(freq, ms, duty))
+
+            await _json(writer, 202, {"playing": True, "until_ms_from_now": ms})
+
+        elif method == "POST" and path == "/melody":
+            data = {}
+            if body:
+                try:
+                    data = ujson.loads(body)
+                except:
+                    pass
+            notes = data.get("notes", [])
+            gap_ms = int(data.get("gap_ms", 20))
+
+            async with _task_lock:
+                global _play_task
+                if _play_task and not _play_task.done():
+                    _play_task.cancel()
+                    _set_silence()
+                _play_task = asyncio.create_task(_play_melody(notes, gap_ms))
+
+            await _json(writer, 202, {"queued": len(notes)})
+
+        elif method == "GET" and path == "/events":
+            # basic SSE stream of normalized sensor value
+            await _sse(writer)
+
+        else:
+            await _text(writer, 404, "Not found")
+
+    except Exception as e:
+        try:
+            await _text(writer, 500, f"error: {e}")
+        except:
+            pass
+    finally:
+        try:
+            await writer.aclose()
+        except:
+            pass
+
+async def _json(w, status, obj):
+    body = ujson.dumps(obj)
+    await w.awrite(f"HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n{body}")
+
+async def _text(w, status, text):
+    body = text
+    await w.awrite(f"HTTP/1.1 {status} OK\r\nContent-Type: text/plain\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n{body}")
+
+async def _sse(w):
+    # minimalist SSE; keep socket open and push updates
+    await w.awrite("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
+    try:
+        while True:
+            raw, norm, lux = read_sensor()
+            data = ujson.dumps({"norm": round(norm,3), "ts": time.ticks_ms()})
+            await w.awrite(f"data: {data}\n\n")
+            await asyncio.sleep_ms(500)
+    except:
+        # client disconnected
+        pass
+
+async def wifi_connect():
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    if not wlan.isconnected():
+        wlan.connect(WIFI_SSID, WIFI_PSK)
+        t0 = time.ticks_ms()
+        while not wlan.isconnected():
+            await asyncio.sleep_ms(200)
+            if time.ticks_diff(time.ticks_ms(), t0) > 15000:
+                break
+    print("wifi:", wlan.ifconfig())
+    return wlan
+
+async def serve():
+    addr = socket.getaddrinfo("0.0.0.0", 80)[0][-1]
+    s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(addr)
+    s.listen(2)
+    print("listening on", addr)
+
+    while True:
+        client_sock, _ = s.accept()
+        reader = asyncio.StreamReader(client_sock)
+        writer = asyncio.StreamWriter(client_sock, {})
+        asyncio.create_task(handle_client(reader, writer))
+
+async def main():
+    print("Device ID:", DEVICE_ID)
+    await wifi_connect()
+    await serve()
+
+try:
+    asyncio.run(main())
+finally:
+    asyncio.new_event_loop()
