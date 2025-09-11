@@ -1,0 +1,29 @@
+# dashboard.py — poll all devices and print status/sensor readings
+import time, requests
+
+PICOS = ["http://192.168.1.123", "http://192.168.1.124"]
+
+def get_json(url):
+    try:
+        r = requests.get(url, timeout=2)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+def main():
+    print("ctrl+c to stop")
+    while True:
+        print("="*54)
+        for base in PICOS:
+            h = get_json(f"{base}/health")
+            s = get_json(f"{base}/sensor")
+            dev = h.get("device_id", "unknown")
+            status = h.get("status", "down")
+            norm = s.get("norm", None)
+            lux  = s.get("lux_est", None)
+            print(f"{base:22} | {dev:20} | {status:3} | norm={norm} lux={lux}")
+        time.sleep(0.5)
+
+if __name__ == "__main__":
+    main()
