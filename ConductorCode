@@ -1,0 +1,30 @@
+# conductor.py — send coordinated melodies to multiple Pico "device services"
+import json, time, requests
+
+# List your Pico IPs (or mDNS names if you add that later)
+PICOS = ["http://192.168.1.123", "http://192.168.1.124"]
+
+# C-major arpeggio
+NOTES = [
+    {"freq": 523, "ms": 200},  # C5
+    {"freq": 659, "ms": 200},  # E5
+    {"freq": 784, "ms": 400},  # G5
+]
+
+def send_melody(base_url, notes, gap=30):
+    url = f"{base_url}/melody"
+    r = requests.post(url, json={"notes": notes, "gap_ms": gap}, timeout=3)
+    r.raise_for_status()
+    return r.json()
+
+def main():
+    # simple round-robin staggering
+    for i, pico in enumerate(PICOS):
+        try:
+            print("cue ->", pico, send_melody(pico, NOTES, gap=25))
+            time.sleep(0.1 * i)  # tiny offset for fun
+        except Exception as e:
+            print("error with", pico, e)
+
+if __name__ == "__main__":
+    main()
