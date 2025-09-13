@@ -1,5 +1,59 @@
 # 2025 Fall ECE Senior Design Miniproject
 
+# Raspberry Pi Pico 2W — Light Orchestra (Terminal-Controlled)
+
+## Overview
+
+The Light Orchestra utilizes a Raspberry Pi Pico 2W along with a resistor, green LED (currently for testing), a photoresistor, and a buzzer. The photoresistor recognizes a change in lighting, and the Pico sends respective PWM signals to the green LED and buzzer to turn the led on and play a melody. 
+
+System is controlled in the Thonny terminal utilizing micropython. Has 'on', 'off', and '13' (this is for LED test purposes).
+---
+
+## Hardware Setup
+
+* **Pico 2W Pins:**
+
+  * Photoresistor → voltage divided with 1kohm resistance. Midpoint connected to **GP28 (ADC2)**
+  * Piezo buzzer → **GP16 (PWM)**
+  * Green LED → **GP13 (PWM capable)**, cathode to **GND**.
+
+---
+
+## Firmware Features
+
+* **Calibration**: Determines the ambient light levels on startup.
+* **Trigger logic**: When light detected by photoresistor, play melody and turn on LED.
+* **Melody playback**: Plays random melody per activation (supposedly, sounds the same to us currently. will be worked on)
+
+---
+
+## Terminal Commands in Thonny
+
+* `on` → Begins detecting light.
+* `off` → Stop detecting light.
+* `cal` → Recalibrate light baseline.
+* `quit` → Halt program.
+* `13` → Force **LED ON** at full brightness (debug).
+* `13off` or `0` → Force **LED OFF** (debug).
+
+---
+
+## Operation
+
+1. Save and Run `main.py` on the Pico 2W microcontroller.
+2. System calibrates, then type 'on' in **Thonny** terminal.
+   * If photoresistor detects a change in light, melody plays and LED lights up.
+3. Use `off` to stop.
+
+---
+
+## Future Extensions
+
+* Add RGB LED for different colors.
+* Add distinct melodies for each color (?)
+
+
+________________________________________________________________________________________________________________________________________________
 [Project definition](./Project.md)
 
 This project uses the Raspberry Pi Pico 2WH SC1634 (wireless, with header pins).
